@@ -1,25 +1,84 @@
 package main
 
 import (
-  "fmt"
+	"backend-ujian-gofiber/src/database"
+	"backend-ujian-gofiber/src/models"
+	"backend-ujian-gofiber/src/routers"
+	"backend-ujian-gofiber/src/utils"
+	"github.com/gofiber/fiber/v2"
+	"github.com/google/uuid"
+	"github.com/joho/godotenv"
+	"log"
 )
 
-//TIP To run your code, right-click the code and select <b>Run</b>. Alternatively, click
-// the <icon src="AllIcons.Actions.Execute"/> icon in the gutter and select the <b>Run</b> menu item from here.
-
 func main() {
-  //TIP Press <shortcut actionId="ShowIntentionActions"/> when your caret is at the underlined or highlighted text
-  // to see how GoLand suggests fixing it.
-  s := "gopher"
-  fmt.Println("Hello and welcome, %s!", s)
-
-  for i := 1; i <= 5; i++ {
-	//TIP You can try debugging your code. We have set one <icon src="AllIcons.Debugger.Db_set_breakpoint"/> breakpoint
-	// for you, but you can always add more by pressing <shortcut actionId="ToggleLineBreakpoint"/>. To start your debugging session, 
-	// right-click your code in the editor and select the <b>Debug</b> option. 
-	fmt.Println("i =", 100/i)
-  }
+	loadEnv()
+	loadDatabase()
+	serveApplication()
 }
 
-//TIP See GoLand help at <a href="https://www.jetbrains.com/help/go/">jetbrains.com/help/go/</a>.
-// Also, you can try interactive lessons for GoLand by selecting 'Help | Learn IDE Features' from the main menu.
+func loadDatabase() {
+	database.InitDB()
+	database.DB.AutoMigrate(&models.Kelas{})
+	database.DB.AutoMigrate(&models.Pengguna{})
+	seedData()
+}
+
+func seedData() {
+	emailAdmin := "kangsigit@gmail.com"
+	passwordAdmin := "qwerty"
+	passwordAdminHash, _ := utils.HashPassword(passwordAdmin)
+
+	idSiswa := "X-TKJ-1"
+	passwordSiswa := "ytrewq"
+	passwordSiswaHash, _ := utils.HashPassword(passwordSiswa)
+
+	var admin = []models.Pengguna{
+		{
+			ID:            uuid.New(),
+			IdSiswa:       nil,
+			NamaPengguna:  "Sigit Admin",
+			EmailPengguna: &emailAdmin,
+			Password:      passwordAdminHash,
+			PasswordPlain: nil,
+			RolePengguna:  models.Admin,
+			KelasID:       nil,
+		},
+	}
+
+	var siswa = []models.Pengguna{
+		{
+			ID:            uuid.New(),
+			IdSiswa:       &idSiswa,
+			NamaPengguna:  "Sigit Siswa",
+			EmailPengguna: nil,
+			Password:      passwordSiswaHash,
+			PasswordPlain: &passwordSiswa,
+			RolePengguna:  models.Siswa,
+			KelasID:       nil,
+		},
+	}
+
+	database.DB.Create(&admin)
+	database.DB.Create(&siswa)
+}
+
+func loadEnv() {
+	err := godotenv.Load(".env")
+	if err != nil {
+		log.Fatal("Error loading .env file")
+	}
+	log.Println("Successfully loaded .env file")
+}
+
+func serveApplication() {
+	app := fiber.New()
+
+	routers.SetupRoutes(app)
+
+	err := app.Listen(":8081")
+	if err != nil {
+		log.Fatal(err)
+		return
+	}
+}

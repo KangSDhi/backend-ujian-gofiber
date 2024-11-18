@@ -1,0 +1,28 @@
+name: backend-ujian-gofiber
+
+services:
+
+  db:
+    image: mariadb:10.7.8
+    container_name: backend-ujian-gofiber-db
+    ports:
+      - "3301:3306"
+    environment:
+      MARIADB_ROOT_PASSWORD: "toor"
+      MARIADB_USER: "go"
+      MARIADB_PASSWORD: "go"
+      MARIADB_DATABASE: "ujian-db"
+
+    volumes:
+      - backend-ujian-gofiber-data:/var/lib/mariadb
+
+    networks:
+      - backend-ujian-gofiber-net
+
+volumes:
+  backend-ujian-gofiber-data:
+    driver: local
+
+networks:
+  backend-ujian-gofiber-net:
+    driver: bridge
