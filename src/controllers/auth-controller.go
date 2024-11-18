@@ -17,104 +17,70 @@ func Login(ctx *fiber.Ctx) error {
 	var request dto.LoginRequest
 
 	if err := ctx.BodyParser(&request); err != nil {
-		return ctx.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"errors": "Invalid Request Payload",
-		})
+		return badRequest(ctx, "Invalid Request Payload!")
 	}
 
 	if err := validate.Struct(request); err != nil {
-		var validationErrors validator.ValidationErrors
-		if errors.As(err, &validationErrors) {
-
-			errorMap := make(map[string]string)
-			for _, fieldError := range validationErrors {
-				errorMap[fieldError.Field()] = fieldError.Error()
-			}
-
-			return ctx.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-				"errors": errorMap,
-			})
-		}
-
-		return ctx.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"errors": "Failed To Validate Input",
-		})
+		return validationError(ctx, err)
 	}
 
-	if isEmail(request.EmailOrIDSiswa) {
-		penggunaAdmin, err := models.FindPenggunaByEmail(request.EmailOrIDSiswa)
-
-		if err != nil {
-			//return ctx.Status(fiber.StatusNotFound).JSON(fiber.Map{
-			//	"errors": "Pengguna Tidak Ditemukan",
-			//})
-			if err.Error() == "Admin Tidak Ditemukan!" {
-				return ctx.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-					"errors": err.Error(),
-				})
-			}
-		}
-
-		if utils.CheckPasswordHash(request.Password, penggunaAdmin.Password) {
-			jwt, err := config.GenerateJWT(penggunaAdmin)
-
-			if err != nil {
-				return ctx.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-					"errors": err.Error(),
-				})
-			}
-
-			return ctx.Status(fiber.StatusOK).JSON(fiber.Map{
-				"message": "Berhasil Login!",
-				"data": fiber.Map{
-					"token":         jwt,
-					"nama_pengguna": penggunaAdmin.NamaPengguna,
-				},
-			})
-
-		} else {
-			return ctx.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-				"errors": "Password Salah!",
-			})
-		}
-	} else {
-
-		penggunaSiswa, err := models.FindPenggunaByIDSiswa(request.EmailOrIDSiswa)
-
-		if err != nil {
-			if err.Error() == "Siswa Tidak Ditemukan!" {
-				return ctx.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-					"errors": err.Error(),
-				})
-			}
-		}
-
-		if utils.CheckPasswordHash(request.Password, penggunaSiswa.Password) {
-			jwt, err := config.GenerateJWT(penggunaSiswa)
-
-			if err != nil {
-				return ctx.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-					"errors": err.Error(),
-				})
-			}
-
-			return ctx.Status(fiber.StatusOK).JSON(fiber.Map{
-				"message": "Berhasil Login!",
-				"data": fiber.Map{
-					"token":         jwt,
-					"nama_pengguna": penggunaSiswa.NamaPengguna,
-				},
-			})
-		} else {
-			return ctx.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-				"errors": "Password Salah!",
-			})
-		}
+	user, err := findUser(request.EmailOrIDSiswa)
+	if err != nil {
+		return badRequest(ctx, err.Error())
 	}
+
+	if !utils.CheckPasswordHash(request.Password, user.Password) {
+		return badRequest(ctx, "Password Salah!")
+	}
+
+	token, err := config.GenerateJWT(user)
+	if err != nil {
+		return badRequest(ctx, err.Error())
+	}
+
+	return ctx.Status(fiber.StatusOK).JSON(fiber.Map{
+		"code":    fiber.StatusOK,
+		"message": "Berhasil Login!",
+		"data": fiber.Map{
+			"token":         token,
+			"nama_pengguna": user.NamaPengguna,
+			"role_pengguna": user.RolePengguna,
+		},
+	})
 }
 
 func isEmail(email string) bool {
 	regex := `^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$`
 	re := regexp.MustCompile(regex)
 	return re.MatchString(email)
+}
+
+func findUser(identifier string) (models.Pengguna, error) {
+	if isEmail(identifier) {
+		return models.FindPenggunaByEmail(identifier)
+	}
+	return models.FindPenggunaByIDSiswa(identifier)
+}
+
+func badRequest(ctx *fiber.Ctx, message string) error {
+	return ctx.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+		"code":    fiber.StatusBadRequest,
+		"message": message,
+	})
+}
+
+func validationError(ctx *fiber.Ctx, err error) error {
+	var validationErrors validator.ValidationErrors
+	if errors.As(err, &validationErrors) {
+		errorMap := make(map[string]string)
+		for _, fieldError := range validationErrors {
+			errorMap[fieldError.Field()] = fieldError.Error()
+		}
+		return ctx.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"code":    fiber.StatusBadRequest,
+			"message": "Validasi Error",
+			"errors":  errorMap,
+		})
+	}
+	return badRequest(ctx, "Failed To Validate Input")
 }
